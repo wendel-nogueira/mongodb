@@ -1,6 +1,7 @@
 version: "3.8"
+
 services:
-  mongo2:
+  mongo1:
     image: mongo:latest
     container_name: mongodb
     command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
@@ -9,28 +10,55 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: always
+    healthcheck:
+      test: [
+          "CMD",
+          "mongosh",
+          "--port",
+          "27017",
+          "--quiet",
+          "--eval",
+          "try { rs.status() }
+          catch (err) { rs.initiate({_id:'rs0',members:[{_id:0,host:'host.docker.internal:27017',priority:1},{_id:1,host:'host.docker.internal:27018',priority:0.5},{_id:2,host:'host.docker.internal:27019',priority:0.5}]}) }",
+        ]
+      interval: 5s
+      timeout: 30s
+      retries: 30
     volumes:
-      - "mongodb_data:/data/db"
-      - "mongodb_config:/data/configdb"
-    networks:
-      - mongo-network
+      - "mongodb_data1:/data/db"
+      - "mongodb_config1:/data/configdb"
+    depends_on:
+      - mongo2
+      - mongo3
 
-  mongo-express:
-    image: mongo-express:latest
-    container_name: mongo-express
+  mongo2:
+    image: mongo:latest
+    container_name: mongodb2
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27018"]
     ports:
-      - "8081:8081"
-    restart: always
-    environment:
-      ME_CONFIG_MONGODB_ADMINUSERNAME: root
-      ME_CONFIG_MONGODB_ADMINPASSWORD: root
-    networks:
-      - mongo-network
+      - 27018:27018
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - "mongo2_data:/data/db"
+      - "mongo2_config:/data/configdb"
 
-networks:
-  mongo-network:
-    driver: bridge
+  mongo3:
+    image: mongo:latest
+    container_name: mongodb3
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27019"]
+    ports:
+      - 27019:27019
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - "mongo3_data:/data/db"
+      - "mongo3_config:/data/configdb"
 
 volumes:
-  mongodb_data:
-  mongodb_config:
+  mongodb_data1:
+  mongodb_config1:
+  mongo2_data:
+  mongo2_config:
+  mongo3_data:
+  mongo3_config:
