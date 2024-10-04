@@ -1,0 +1,207 @@
+version: "3.8"
+
+services:
+  # MongoDB Replica Set - Shard 1
+  mongo1:
+    image: mongo:latest
+    container_name: mongodb-shard01-1
+    command:
+      ["--replSet", "shard1", "--bind_ip_all", "--port", "27018", "--shardsvr"]
+    ports:
+      - 27018:27018
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: always
+    healthcheck:
+      test: [
+          "CMD",
+          "mongosh",
+          "--port",
+          "27018",
+          "--quiet",
+          "--eval",
+          "try { rs.status() }
+          catch (err) { rs.initiate({_id:'shard1',members:[{_id:0,host:'host.docker.internal:27018',priority:1},{_id:1,host:'host.docker.internal:27019',priority:0.5},{_id:2,host:'host.docker.internal:27020',priority:0.5}]}) }",
+        ]
+      interval: 5s
+      timeout: 30s
+      retries: 30
+    volumes:
+      - "mongodb_data1:/data/db"
+      - "mongodb_config1:/data/configdb"
+    depends_on:
+      - mongo2
+      - mongo3
+
+  mongo2:
+    image: mongo:latest
+    container_name: mongodb-shard01-2
+    command:
+      ["--replSet", "shard1", "--bind_ip_all", "--port", "27019", "--shardsvr"]
+    ports:
+      - 27019:27019
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - "mongo2_data:/data/db"
+      - "mongo2_config:/data/configdb"
+
+  mongo3:
+    image: mongo:latest
+    container_name: mongodb-shard01-3
+    command:
+      ["--replSet", "shard1", "--bind_ip_all", "--port", "27020", "--shardsvr"]
+    ports:
+      - 27020:27020
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - "mongo3_data:/data/db"
+      - "mongo3_config:/data/configdb"
+
+  # MongoDB Replica Set - Shard 2
+  mongo4:
+    image: mongo:latest
+    container_name: mongodb-shard02-4
+    command:
+      ["--replSet", "shard2", "--bind_ip_all", "--port", "27021", "--shardsvr"]
+    restart: always
+    ports:
+      - 27021:27021
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: [
+          "CMD",
+          "mongosh",
+          "--port",
+          "27021",
+          "--quiet",
+          "--eval",
+          "try { rs.status() }
+          catch (err) { rs.initiate({_id:'shard2',members:[{_id:0,host:'host.docker.internal:27021',priority:1},{_id:1,host:'host.docker.internal:27022',priority:0.5},{_id:2,host:'host.docker.internal:27023',priority:0.5}]}) }",
+        ]
+      interval: 5s
+      timeout: 30s
+      retries: 30
+    volumes:
+      - "mongo4_data:/data/db"
+      - "mongo4_config:/data/configdb"
+    depends_on:
+      - mongo5
+      - mongo6
+
+  mongo5:
+    image: mongo:latest
+    container_name: mongodb-shard02-5
+    command:
+      ["--replSet", "shard2", "--bind_ip_all", "--port", "27022", "--shardsvr"]
+    ports:
+      - 27022:27022
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - "mongo5_data:/data/db"
+      - "mongo5_config:/data/configdb"
+
+  mongo6:
+    image: mongo:latest
+    container_name: mongodb-shard02-6
+    command:
+      ["--replSet", "shard2", "--bind_ip_all", "--port", "27023", "--shardsvr"]
+    ports:
+      - 27023:27023
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - "mongo6_data:/data/db"
+      - "mongo6_config:/data/configdb"
+
+  # MongoDB Config Server
+  configsvr:
+    image: mongo:latest
+    container_name: mongodb-config
+    command:
+      [
+        "--configsvr",
+        "--replSet",
+        "configReplSet",
+        "--bind_ip_all",
+        "--port",
+        "27024",
+      ]
+    ports:
+      - 27024:27024
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: [
+          "CMD",
+          "mongosh",
+          "--port",
+          "27024",
+          "--quiet",
+          "--eval",
+          "try { rs.status() }
+          catch (err) { rs.initiate({_id:'configReplSet',members:[{_id:0,host:'host.docker.internal:27024',priority:1}]}) }",
+        ]
+      interval: 5s
+      timeout: 30s
+      retries: 30
+    volumes:
+      - "configsvr_data:/data/db"
+      - "configsvr_config:/data/configdb"
+    restart: always
+
+  # MongoDB Router
+  mongos:
+    image: mongo:latest
+    container_name: mongodb-router
+    command:
+      [
+        "mongos",
+        "--configdb",
+        "configReplSet/host.docker.internal:27024",
+        "--bind_ip_all",
+        "--port",
+        "27017",
+      ]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--port",
+          "27024",
+          "--quiet",
+          "--eval",
+          "try { sh.status() } catch (err) { sh.addShard('shard1/host.docker.internal:27018,host.docker.internal:27019,host.docker.internal:27020'); sh.addShard('shard2/host.docker.internal:27021,host.docker.internal:27022,host.docker.internal:27023'); }",
+        ]
+      interval: 5s
+      timeout: 30s
+      retries: 30
+    ports:
+      - 27017:27017
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: always
+    depends_on:
+      - configsvr
+
+volumes:
+  mongodb_data1:
+  mongodb_config1:
+  mongo2_data:
+  mongo2_config:
+  mongo3_data:
+  mongo3_config:
+
+  mongo4_data:
+  mongo4_config:
+  mongo5_data:
+  mongo5_config:
+  mongo6_data:
+  mongo6_config:
+
+  configsvr_data:
+  configsvr_config:
